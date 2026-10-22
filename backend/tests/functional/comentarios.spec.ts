@@ -396,6 +396,35 @@ test.group('POST /posts/:slug/comentarios', (group) => {
     assert.equal(respuesta.body().comentario.padre_id, 9101)
   })
 
+  test('DESVIACIÓN DEL REFACTOR: un nombre o un cuerpo que no son texto se rechazan', async ({
+    client,
+    assert,
+  }) => {
+    // Arrange
+    await db.table('posts').insert(unPostPublicado())
+    const valido = {
+      autor_nombre: 'Lucía Ferrer',
+      autor_email: 'lucia.ferrer@ejemplo.es',
+      cuerpo: 'Un comentario suficientemente largo.',
+    }
+
+    // Act
+    const nombreNumerico = await client
+      .post(`/posts/${SLUG}/comentarios`)
+      .json({ ...valido, autor_nombre: 123 })
+    const cuerpoNumerico = await client
+      .post(`/posts/${SLUG}/comentarios`)
+      .json({ ...valido, cuerpo: 12345 })
+
+    // Assert — el legacy los aceptaba y guardaba «123.0» y «12345.0» (y un array daba 500).
+    // El validador VineJS exige texto. La web solo envía texto, así que nadie lo nota.
+    nombreNumerico.assertStatus(400)
+    nombreNumerico.assertBody({ error: 'El nombre es obligatorio' })
+    cuerpoNumerico.assertStatus(200)
+    cuerpoNumerico.assertBody({ ok: false, motivo: 'comentario demasiado corto' })
+    assert.lengthOf(await db.from('comentarios').where('post_id', POST_ID), 0)
+  })
+
   test('BUG H8: un correo que es solo «@» pasa la validación', async ({ client, assert }) => {
     // Arrange
     await db.table('posts').insert(unPostPublicado())
@@ -676,6 +705,24 @@ test.group('PATCH /comentarios/:id', (group) => {
     // Assert
     respuesta.assertStatus(200)
     assert.equal(respuesta.body().comentario.autor_email, 'ana.cortes@ejemplo.es')
+  })
+
+  test('un comentario sin fecha de creación devuelve creado_en null', async ({
+    client,
+    assert,
+  }) => {
+    // Arrange
+    await db.table('posts').insert(unPostPublicado())
+    await db.table('comentarios').insert(unComentario({ creado_en: null }))
+
+    // Act
+    const respuesta = await client
+      .patch('/comentarios/9101')
+      .json({ autor_email: 'ana.cortes@ejemplo.es', cuerpo: 'Cuerpo editado.' })
+
+    // Assert
+    respuesta.assertStatus(200)
+    assert.isNull(respuesta.body().comentario.creado_en)
   })
 
   test('BUG H11: un cuerpo de un solo carácter se acepta', async ({ client, assert }) => {
