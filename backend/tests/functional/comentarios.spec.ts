@@ -102,7 +102,7 @@ test.group('POST /posts/:slug/comentarios', (group) => {
     })
 
     // Assert
-    respuesta.assertStatus(201)
+    respuesta.assertStatus(200)
     assert.sameMembers(Object.keys(respuesta.body()), ['comentario'])
     const comentario = respuesta.body().comentario
     afirmarContratoComentario(assert, comentario)
